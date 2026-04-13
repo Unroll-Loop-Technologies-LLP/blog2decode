@@ -10,6 +10,8 @@ interface AuthContextType {
   signUp: (email: string, password: string, name: string, role?: 'reader' | 'author') => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updateProfile: (updates: { name?: string; email?: string }) => Promise<void>;
+  sendPasswordResetEmail: (email: string) => Promise<void>;
   isAuthor: boolean;
   isAdmin: boolean;
 }
@@ -99,6 +101,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   };
 
+  const updateProfile = async (updates: { name?: string; email?: string }) => {
+    if (!session?.user) {
+      throw new Error('You must be signed in to update your profile.');
+    }
+
+    const nextName = updates.name?.trim();
+    const nextEmail = updates.email?.trim();
+
+    if (nextEmail && nextEmail !== session.user.email) {
+      const { error } = await supabase.auth.updateUser({ email: nextEmail });
+      if (error) throw error;
+    }
+
+    const profileUpdates: Partial<User> = {};
+    if (nextName !== undefined) profileUpdates.name = nextName;
+    if (nextEmail !== undefined) profileUpdates.email = nextEmail;
+
+    if (Object.keys(profileUpdates).length > 0) {
+      const { error } = await supabase
+        .from('users')
+        .update(profileUpdates)
+        .eq('id', session.user.id);
+
+      if (error) throw error;
+    }
+
+    await fetchUserProfile(session.user.id);
+  };
+
+  const sendPasswordResetEmail = async (email: string) => {
+    const redirectTo = `${window.location.origin}/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) throw error;
+  };
+
   const isAuthor = user?.role === 'author' || user?.role === 'admin';
   const isAdmin = user?.role === 'admin';
 
@@ -111,6 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signIn,
         signOut,
+        updateProfile,
+        sendPasswordResetEmail,
         isAuthor,
         isAdmin,
       }}

@@ -4,17 +4,23 @@ import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { subscriptionService } from '../../services/subscription.service';
 import type { User, Subscription } from '../../types';
-import { Users, Mail, Tags, Folder, Loader2 } from 'lucide-react';
+import { Users, Mail, Loader2, Save, KeyRound, Settings } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 export function AdminDashboard() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, user: currentUser, updateProfile, sendPasswordResetEmail } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'users' | 'subscriptions' | 'categories' | 'tags'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'subscriptions' | 'account'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [accountName, setAccountName] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
+  const [savingAccount, setSavingAccount] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -24,6 +30,11 @@ export function AdminDashboard() {
     loadData();
   }, [isAdmin, activeTab]);
 
+  useEffect(() => {
+    setAccountName(currentUser?.name || '');
+    setAccountEmail(currentUser?.email || '');
+  }, [currentUser]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -32,7 +43,15 @@ export function AdminDashboard() {
           .from('users')
           .select('*')
           .order('created_at', { ascending: false });
-        setUsers(data || []);
+
+        const nextUsers = data || [];
+        setUsers(nextUsers);
+        setUserNames(
+          nextUsers.reduce<Record<string, string>>((acc, user) => {
+            acc[user.id] = user.name || '';
+            return acc;
+          }, {})
+        );
       } else if (activeTab === 'subscriptions') {
         const data = await subscriptionService.getSubscriptions();
         setSubscriptions(data);
@@ -46,21 +65,76 @@ export function AdminDashboard() {
 
   const handleUpdateUserRole = async (userId: string, newRole: 'reader' | 'author' | 'admin') => {
     try {
-      await supabase
+      const { error } = await supabase
         .from('users')
         .update({ role: newRole })
         .eq('id', userId);
 
+      if (error) throw error;
+
       toast.success('User role updated successfully!');
       await loadData();
-    } catch (error) {
-      toast.error('Failed to update user role');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update user role');
+    }
+  };
+
+  const handleUpdateUserName = async (userId: string) => {
+    setSavingUserId(userId);
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({ name: userNames[userId]?.trim() || null })
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      toast.success('User name updated successfully!');
+      await loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update user name');
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  const handleSendReset = async (email: string, userId: string) => {
+    setResettingUserId(userId);
+    try {
+      await sendPasswordResetEmail(email);
+      toast.success('Password reset email sent successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to send password reset email');
+    } finally {
+      setResettingUserId(null);
+    }
+  };
+
+  const handleUpdateAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAccount(true);
+    try {
+      await updateProfile({
+        name: accountName,
+        email: accountEmail,
+      });
+
+      toast.success(
+        accountEmail !== currentUser?.email
+          ? 'Account updated. Check your new email inbox to confirm the email change.'
+          : 'Account updated successfully!'
+      );
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update account');
+    } finally {
+      setSavingAccount(false);
     }
   };
 
   const tabs = [
     { id: 'users' as const, label: 'Users', icon: Users },
     { id: 'subscriptions' as const, label: 'Subscriptions', icon: Mail },
+    { id: 'account' as const, label: 'Account', icon: Settings },
   ];
 
   return (
@@ -108,7 +182,29 @@ export function AdminDashboard() {
                   <tbody className="divide-y">
                     {users.map((user) => (
                       <tr key={user.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4">{user.name}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={userNames[user.id] ?? ''}
+                              onChange={(e) =>
+                                setUserNames((current) => ({
+                                  ...current,
+                                  [user.id]: e.target.value,
+                                }))
+                              }
+                              className="w-full max-w-xs px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                            />
+                            <button
+                              onClick={() => handleUpdateUserName(user.id)}
+                              disabled={savingUserId === user.id}
+                              className="inline-flex items-center gap-1 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              <Save className="w-4 h-4" />
+                              Save
+                            </button>
+                          </div>
+                        </td>
                         <td className="px-6 py-4 text-gray-600">{user.email}</td>
                         <td className="px-6 py-4">
                           <span
@@ -116,8 +212,8 @@ export function AdminDashboard() {
                               user.role === 'admin'
                                 ? 'bg-purple-100 text-purple-700'
                                 : user.role === 'author'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-700'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-gray-100 text-gray-700'
                             }`}
                           >
                             {user.role}
@@ -127,17 +223,29 @@ export function AdminDashboard() {
                           {format(new Date(user.created_at), 'MMM d, yyyy')}
                         </td>
                         <td className="px-6 py-4">
-                          <select
-                            value={user.role}
-                            onChange={(e) =>
-                              handleUpdateUserRole(user.id, e.target.value as 'reader' | 'author' | 'admin')
-                            }
-                            className="px-3 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-black"
-                          >
-                            <option value="reader">Reader</option>
-                            <option value="author">Author</option>
-                            <option value="admin">Admin</option>
-                          </select>
+                          <div className="flex flex-wrap gap-2">
+                            <select
+                              value={user.role}
+                              onChange={(e) =>
+                                handleUpdateUserRole(user.id, e.target.value as 'reader' | 'author' | 'admin')
+                              }
+                              className="px-3 py-1 border rounded text-sm focus:outline-none focus:ring-2 focus:ring-black"
+                            >
+                              <option value="reader">Reader</option>
+                              <option value="author">Author</option>
+                              <option value="admin">Admin</option>
+                            </select>
+                            {user.email && (
+                              <button
+                                onClick={() => handleSendReset(user.email!, user.id)}
+                                disabled={resettingUserId === user.id}
+                                className="inline-flex items-center gap-1 px-3 py-1 border rounded text-sm hover:bg-gray-50 disabled:opacity-50"
+                              >
+                                <KeyRound className="w-4 h-4" />
+                                Reset Password
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -174,6 +282,69 @@ export function AdminDashboard() {
                 {subscriptions.length === 0 && (
                   <div className="text-center py-8 text-gray-500">No subscriptions yet</div>
                 )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'account' && (
+            <div className="max-w-2xl">
+              <div className="bg-white border rounded-2xl p-8">
+                <h2 className="font-bold text-2xl mb-2">Admin Account Settings</h2>
+                <p className="text-gray-600 mb-6">
+                  Update your display name, request an email change, or send yourself a password reset email.
+                </p>
+
+                <form onSubmit={handleUpdateAccount} className="space-y-5">
+                  <div>
+                    <label htmlFor="accountName" className="block text-sm font-medium mb-2">
+                      Display Name
+                    </label>
+                    <input
+                      id="accountName"
+                      type="text"
+                      value={accountName}
+                      onChange={(e) => setAccountName(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="accountEmail" className="block text-sm font-medium mb-2">
+                      Email Address
+                    </label>
+                    <input
+                      id="accountEmail"
+                      type="email"
+                      value={accountEmail}
+                      onChange={(e) => setAccountEmail(e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
+                    />
+                    <p className="mt-2 text-sm text-gray-500">
+                      Email changes require confirmation from the new inbox before they fully take effect.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="submit"
+                      disabled={savingAccount}
+                      className="px-5 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50"
+                    >
+                      {savingAccount ? 'Saving...' : 'Save Account Changes'}
+                    </button>
+
+                    {currentUser?.email && (
+                      <button
+                        type="button"
+                        onClick={() => handleSendReset(currentUser.email!, currentUser.id)}
+                        disabled={resettingUserId === currentUser.id}
+                        className="px-5 py-3 border rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      >
+                        Send Password Reset Email
+                      </button>
+                    )}
+                  </div>
+                </form>
               </div>
             </div>
           )}

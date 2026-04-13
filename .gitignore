@@ -1,0 +1,28 @@
+node_modules/*
+package-lock.json 
+dist/*
+coverage/* 
+.DS_Store
+.idea/* 
+.vscode/*
+*.log
+*.tsbuildinfo
+# dependencies
+node_modules/
+
+# build
+dist/
+.vite/
+
+# environment
+.env
+.env.local
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db

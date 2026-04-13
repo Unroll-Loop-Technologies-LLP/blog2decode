@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { blogService } from '../../services/blog.service';
+import { storageService } from '../../services/storage.service';
 import type { BlogWithAuthor, Category, Tag } from '../../types';
 import { RichTextEditor } from '../components/RichTextEditor';
-import { Plus, Edit, Trash2, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -18,7 +19,6 @@ export function AuthorDashboard() {
   const [showEditor, setShowEditor] = useState(false);
   const [editingBlog, setEditingBlog] = useState<BlogWithAuthor | null>(null);
 
-  // Form state
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [excerpt, setExcerpt] = useState('');
@@ -27,6 +27,8 @@ export function AuthorDashboard() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (!isAuthor) {
@@ -79,8 +81,8 @@ export function AuthorDashboard() {
     setExcerpt(blog.excerpt || '');
     setCoverImage(blog.cover_image || '');
     setStatus(blog.status);
-    setSelectedCategories(blog.categories?.map(c => c.id) || []);
-    setSelectedTags(blog.tags?.map(t => t.id) || []);
+    setSelectedCategories(blog.categories?.map((category) => category.id) || []);
+    setSelectedTags(blog.tags?.map((tag) => tag.id) || []);
     setShowEditor(true);
   };
 
@@ -141,6 +143,22 @@ export function AuthorDashboard() {
     }
   };
 
+  const handleUploadImage = async (file: File | undefined) => {
+    if (!file || !user) return;
+
+    setUploadingImage(true);
+    try {
+      const imageUrl = await storageService.uploadBlogImage(file, user.id, setUploadProgress);
+      setCoverImage(imageUrl);
+      toast.success('Cover image uploaded successfully!');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to upload cover image');
+    } finally {
+      setUploadingImage(false);
+      setUploadProgress(0);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -160,7 +178,7 @@ export function AuthorDashboard() {
             }}
             className="text-gray-600 hover:text-black"
           >
-            ← Back to Dashboard
+            Back to Dashboard
           </button>
         </div>
 
@@ -199,6 +217,51 @@ export function AuthorDashboard() {
               className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
               placeholder="https://example.com/image.jpg"
             />
+            <div className="mt-3 flex flex-col gap-3">
+              <label className="block text-sm font-medium text-gray-700">
+                Or upload an image
+              </label>
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={async (e) => {
+                    await handleUploadImage(e.target.files?.[0]);
+                    e.target.value = '';
+                  }}
+                  className="block w-full text-sm text-gray-600 file:mr-4 file:rounded-lg file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-gray-800"
+                />
+                {uploadingImage && (
+                  <div className="w-full sm:max-w-xs">
+                    <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Uploading...
+                      </div>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-black transition-all duration-200"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-gray-500">
+                Upload uses the Supabase bucket `blog-images` by default.
+              </p>
+            </div>
+            {coverImage && (
+              <div className="mt-4">
+                <img
+                  src={coverImage}
+                  alt="Cover preview"
+                  className="w-full max-w-md h-48 object-cover rounded-xl border"
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -219,7 +282,7 @@ export function AuthorDashboard() {
                         if (e.target.checked) {
                           setSelectedCategories([...selectedCategories, category.id]);
                         } else {
-                          setSelectedCategories(selectedCategories.filter(id => id !== category.id));
+                          setSelectedCategories(selectedCategories.filter((id) => id !== category.id));
                         }
                       }}
                       className="w-4 h-4"
@@ -242,7 +305,7 @@ export function AuthorDashboard() {
                         if (e.target.checked) {
                           setSelectedTags([...selectedTags, tag.id]);
                         } else {
-                          setSelectedTags(selectedTags.filter(id => id !== tag.id));
+                          setSelectedTags(selectedTags.filter((id) => id !== tag.id));
                         }
                       }}
                       className="w-4 h-4"

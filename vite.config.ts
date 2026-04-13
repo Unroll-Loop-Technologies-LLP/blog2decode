@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import path from 'path'
+import fs from 'fs'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 
@@ -16,9 +17,24 @@ function figmaAssetResolver() {
   }
 }
 
+function spa404Fallback() {
+  return {
+    name: 'spa-404-fallback',
+    closeBundle() {
+      const indexPath = path.resolve(__dirname, 'dist', 'index.html')
+      const notFoundPath = path.resolve(__dirname, 'dist', '404.html')
+
+      if (fs.existsSync(indexPath)) {
+        fs.copyFileSync(indexPath, notFoundPath)
+      }
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     figmaAssetResolver(),
+    spa404Fallback(),
     // The React and Tailwind plugins are both required for Make, even if
     // Tailwind is not being actively used – do not remove them
     react(),

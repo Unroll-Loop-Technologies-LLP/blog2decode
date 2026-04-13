@@ -118,6 +118,9 @@ ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view all profiles" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Admins can manage all profiles" ON public.users FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
 
 -- Blogs policies
 CREATE POLICY "Anyone can view published blogs" ON public.blogs FOR SELECT USING (
@@ -206,11 +209,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+CREATE OR REPLACE FUNCTION public.sync_user_email()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE public.users
+  SET email = NEW.email
+  WHERE id = NEW.id;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Trigger for new user creation
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+DROP TRIGGER IF EXISTS on_auth_user_email_updated ON auth.users;
+CREATE TRIGGER on_auth_user_email_updated
+  AFTER UPDATE OF email ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.sync_user_email();
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION public.update_updated_at()
@@ -242,6 +261,30 @@ BEGIN
   WHERE id = blog_id AND views_enabled = TRUE;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ================================================
+-- STORAGE (Blog cover image uploads)
+-- ================================================
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('blog-images', 'blog-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Anyone can view blog images" ON storage.objects FOR SELECT USING (
+  bucket_id = 'blog-images'
+);
+
+CREATE POLICY "Authenticated users can upload blog images" ON storage.objects FOR INSERT WITH CHECK (
+  bucket_id = 'blog-images' AND auth.role() = 'authenticated'
+);
+
+CREATE POLICY "Owners can update blog images" ON storage.objects FOR UPDATE USING (
+  bucket_id = 'blog-images' AND owner = auth.uid()
+);
+
+CREATE POLICY "Owners can delete blog images" ON storage.objects FOR DELETE USING (
+  bucket_id = 'blog-images' AND owner = auth.uid()
+);
 
 -- ================================================
 -- SEED DATA (Optional - for testing)

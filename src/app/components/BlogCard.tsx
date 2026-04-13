@@ -1,6 +1,6 @@
 import { Link } from 'react-router';
 import type { BlogWithAuthor } from '../../types';
-import { Calendar, User, Eye } from 'lucide-react';
+import { Calendar, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface BlogCardProps {
@@ -24,12 +24,6 @@ export function BlogCard({ blog }: BlogCardProps) {
       )}
       <div className="p-6">
         <div className="flex items-center gap-4 mb-3 text-sm text-gray-500">
-          {blog.author && (
-            <div className="flex items-center gap-1">
-              <User className="w-4 h-4" />
-              <span>{blog.author.name}</span>
-            </div>
-          )}
           {blog.published_at && (
             <div className="flex items-center gap-1">
               <Calendar className="w-4 h-4" />

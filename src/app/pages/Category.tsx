@@ -4,11 +4,13 @@ import { blogService } from '../../services/blog.service';
 import type { BlogWithAuthor } from '../../types';
 import { BlogCard } from '../components/BlogCard';
 import { Loader2 } from 'lucide-react';
+import { StatePage } from '../components/StatePage';
 
 export function Category() {
   const { slug } = useParams<{ slug: string }>();
   const [blogs, setBlogs] = useState<BlogWithAuthor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (slug) {
@@ -23,6 +25,7 @@ export function Category() {
       setBlogs(data);
     } catch (error) {
       console.error('Error loading blogs:', error);
+      setError('We could not load this category right now.');
     } finally {
       setLoading(false);
     }
@@ -36,6 +39,10 @@ export function Category() {
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
       </div>
     );
+  }
+
+  if (error) {
+    return <StatePage title="Category unavailable" description={error} />;
   }
 
   return (
