@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
 import { blogService } from '../../services/blog.service';
 import { commentService } from '../../services/comment.service';
 import { useAuth } from '../../contexts/AuthContext';
 import type { BlogWithAuthor, CommentWithUser } from '../../types';
-import { Calendar, User, Eye, MessageCircle } from 'lucide-react';
+import { Calendar, Eye, MessageCircle, User } from 'lucide-react';
 import { format } from 'date-fns';
-import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { StatePage } from '../components/StatePage';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 export function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -17,6 +20,7 @@ export function BlogPost() {
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     if (slug) {
@@ -31,7 +35,7 @@ export function BlogPost() {
       setComments(data.comments || []);
     } catch (error) {
       console.error('Error loading blog:', error);
-      toast.error('Blog post not found');
+      setError('The article you requested could not be found or is no longer available.');
     } finally {
       setLoading(false);
     }
@@ -65,16 +69,14 @@ export function BlogPost() {
 
   if (!blog) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-        <h1 className="font-bold text-2xl mb-4">Blog post not found</h1>
-        <a href="/" className="text-blue-600 hover:underline">
-          Go back home
-        </a>
-      </div>
+      <StatePage
+        title="Article unavailable"
+        description={error || 'The article you requested could not be found.'}
+      />
     );
   }
 
-  const contentText = typeof blog.content === 'string' ? blog.content : JSON.stringify(blog.content);
+  const contentText = typeof blog.content === 'string' ? blog.content : '';
 
   return (
     <article className="max-w-4xl mx-auto px-4 py-12">
@@ -92,12 +94,6 @@ export function BlogPost() {
         <h1 className="font-bold text-4xl md:text-5xl mb-6 leading-tight">{blog.title}</h1>
 
         <div className="flex flex-wrap items-center gap-4 text-gray-600 mb-6">
-          {blog.author && (
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5" />
-              <span className="font-medium">{blog.author.name}</span>
-            </div>
-          )}
           {blog.published_at && (
             <div className="flex items-center gap-2">
               <Calendar className="w-5 h-5" />
@@ -114,13 +110,13 @@ export function BlogPost() {
 
         <div className="flex flex-wrap gap-2">
           {blog.categories?.map((category) => (
-            <a
+            <Link
               key={category.id}
-              href={`/category/${category.slug}`}
+              to={`/category/${category.slug}`}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
             >
               {category.name}
-            </a>
+            </Link>
           ))}
           {blog.tags?.map((tag) => (
             <span key={tag.id} className="px-4 py-2 bg-blue-50 text-blue-700 rounded-full">
@@ -131,7 +127,24 @@ export function BlogPost() {
       </header>
 
       <div className="prose prose-lg max-w-none mb-12">
-        <div className="whitespace-pre-wrap leading-relaxed">{contentText}</div>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            img: ({ ...props }) => (
+              <img {...props} className="rounded-xl max-h-[32rem] w-full object-cover" />
+            ),
+            a: ({ ...props }) => (
+              <a
+                {...props}
+                className="text-blue-600 underline underline-offset-4"
+                target="_blank"
+                rel="noreferrer"
+              />
+            ),
+          }}
+        >
+          {contentText}
+        </ReactMarkdown>
       </div>
 
       <div className="border-t pt-12">
@@ -160,7 +173,7 @@ export function BlogPost() {
         ) : (
           <div className="mb-8 p-4 bg-gray-50 rounded-lg text-center">
             <p className="text-gray-600">
-              Please <a href="/login" className="text-blue-600 hover:underline">sign in</a> to leave a comment
+              Please <Link to="/login" className="text-blue-600 hover:underline">sign in</Link> to leave a comment
             </p>
           </div>
         )}

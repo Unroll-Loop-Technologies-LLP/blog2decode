@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { blogService } from '../../services/blog.service';
 import type { BlogWithAuthor } from '../../types';
 import { BlogCard } from '../components/BlogCard';
 import { NewsletterSubscribe } from '../components/NewsletterSubscribe';
 import { Loader2 } from 'lucide-react';
+import { StatePage } from '../components/StatePage';
 
 export function Home() {
   const [blogs, setBlogs] = useState<BlogWithAuthor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     loadBlogs();
@@ -19,6 +22,7 @@ export function Home() {
       setBlogs(data);
     } catch (error) {
       console.error('Error loading blogs:', error);
+      setError('We could not load the latest CyberSphere articles right now.');
     } finally {
       setLoading(false);
     }
@@ -30,6 +34,10 @@ export function Home() {
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
       </div>
     );
+  }
+
+  if (error) {
+    return <StatePage title="Articles unavailable" description={error} />;
   }
 
   const featuredBlog = blogs[0];
@@ -72,7 +80,6 @@ export function Home() {
                 <p className="text-gray-600 text-lg mb-6">{featuredBlog.excerpt}</p>
               )}
               <div className="flex items-center gap-4 text-sm text-gray-500 mb-6">
-                <span>{featuredBlog.author?.name}</span>
                 {featuredBlog.published_at && (
                   <span>
                     {new Date(featuredBlog.published_at).toLocaleDateString('en-US', {
@@ -83,12 +90,12 @@ export function Home() {
                   </span>
                 )}
               </div>
-              <a
-                href={`/blog/${featuredBlog.slug}`}
+              <Link
+                to={`/blog/${featuredBlog.slug}`}
                 className="inline-block px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
               >
                 Read Article
-              </a>
+              </Link>
             </div>
           </div>
         </div>
