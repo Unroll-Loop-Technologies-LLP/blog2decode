@@ -5,7 +5,9 @@ import type { BlogWithAuthor } from '../../types';
 import { BlogCard } from '../components/BlogCard';
 import { NewsletterSubscribe } from '../components/NewsletterSubscribe';
 import { Loader2 } from 'lucide-react';
-import { StatePage } from '../components/StatePage';
+import { ErrorRedirectPage } from '../components/ErrorRedirectPage';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import whoWeAreImage from '../../res/who-we-are.png';
 
 export function Home() {
   const [blogs, setBlogs] = useState<BlogWithAuthor[]>([]);
@@ -37,7 +39,7 @@ export function Home() {
   }
 
   if (error) {
-    return <StatePage title="Articles unavailable" description={error} />;
+    return <ErrorRedirectPage title="Articles unavailable" description={error} redirectUrl="/" />;
   }
 
   const featuredBlog = blogs[0];
@@ -57,12 +59,38 @@ export function Home() {
         </p>
       </div>
 
+      <section className="mb-16">
+        <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-8 items-center bg-white border rounded-3xl overflow-hidden shadow-sm">
+          <div className="p-8 md:p-10">
+            <p className="text-sm font-medium uppercase tracking-[0.25em] text-gray-500 mb-3">
+              Who We Are
+            </p>
+            <h2 className="font-bold text-3xl md:text-4xl leading-tight mb-4">
+              CyberSphere helps teams stay secure, resilient, and ready to scale.
+            </h2>
+            <p className="text-gray-600 text-lg mb-4">
+              We bring together cybersecurity thinking, practical technology strategy, and operational clarity so organizations can grow without exposing the business to unnecessary risk.
+            </p>
+            <p className="text-gray-600 text-lg">
+              From digital trust and data protection to platform modernization and execution discipline, our focus is making security part of how innovation moves forward.
+            </p>
+          </div>
+          <div className="h-full min-h-[320px] bg-slate-950">
+            <ImageWithFallback
+              src={whoWeAreImage}
+              alt="CyberSphere security operations team monitoring global cybersecurity systems"
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      </section>
+
       {featuredBlog && (
         <div className="mb-16">
           <div className="grid md:grid-cols-2 gap-8 items-center">
             {featuredBlog.cover_image && (
               <div className="aspect-[4/3] rounded-2xl overflow-hidden">
-                <img
+                <ImageWithFallback
                   src={featuredBlog.cover_image}
                   alt={featuredBlog.title}
                   className="w-full h-full object-cover"

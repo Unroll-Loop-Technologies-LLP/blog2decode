@@ -4,7 +4,7 @@ import { blogService } from '../../services/blog.service';
 import type { BlogWithAuthor } from '../../types';
 import { BlogCard } from '../components/BlogCard';
 import { Loader2 } from 'lucide-react';
-import { StatePage } from '../components/StatePage';
+import { ErrorRedirectPage } from '../components/ErrorRedirectPage';
 
 export function Category() {
   const { slug } = useParams<{ slug: string }>();
@@ -42,7 +42,7 @@ export function Category() {
   }
 
   if (error) {
-    return <StatePage title="Category unavailable" description={error} />;
+    return <ErrorRedirectPage title="Category unavailable" description={error} redirectUrl="/" />;
   }
 
   return (

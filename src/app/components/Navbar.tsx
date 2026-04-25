@@ -2,14 +2,21 @@ import { Link, useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { PenSquare, LogOut, User, Settings } from 'lucide-react';
 import icon from '../../res/icon.png';
+import { toast } from 'sonner';
 
 export function Navbar() {
   const { user, signOut, isAuthor, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      await signOut();
+      toast.success('Signed out successfully.');
+      window.location.assign('/');
+    } catch (error: any) {
+      toast.error(error.message || 'Could not sign out cleanly, but your local session was cleared.');
+      navigate('/');
+    }
   };
 
   return (

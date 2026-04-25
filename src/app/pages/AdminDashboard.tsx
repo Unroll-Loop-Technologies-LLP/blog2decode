@@ -9,7 +9,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 export function AdminDashboard() {
-  const { isAdmin, user: currentUser, updateProfile, sendPasswordResetEmail } = useAuth();
+  const { isAdmin, user: currentUser, updateProfile, sendPasswordResetEmail, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'users' | 'subscriptions' | 'account'>('users');
   const [users, setUsers] = useState<User[]>([]);
@@ -23,12 +23,14 @@ export function AdminDashboard() {
   const [savingAccount, setSavingAccount] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!isAdmin) {
       navigate('/');
       return;
     }
     loadData();
-  }, [isAdmin, activeTab]);
+  }, [authLoading, isAdmin, activeTab]);
 
   useEffect(() => {
     setAccountName(currentUser?.name || '');
@@ -160,7 +162,7 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {loading ? (
+      {authLoading || loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
         </div>

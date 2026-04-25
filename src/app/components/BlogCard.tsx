@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import type { BlogWithAuthor } from '../../types';
 import { Calendar, Eye } from 'lucide-react';
 import { format } from 'date-fns';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface BlogCardProps {
   blog: BlogWithAuthor;
@@ -15,7 +16,7 @@ export function BlogCard({ blog }: BlogCardProps) {
     >
       {blog.cover_image && (
         <div className="aspect-[16/9] overflow-hidden bg-gray-100">
-          <img
+          <ImageWithFallback
             src={blog.cover_image}
             alt={blog.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"

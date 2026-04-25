@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { StatePage } from '../components/StatePage';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { ErrorRedirectPage } from '../components/ErrorRedirectPage';
 
 export function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
@@ -32,7 +34,13 @@ export function BlogPost() {
     try {
       const data = await blogService.getBlogBySlug(slug);
       setBlog(data);
-      setComments(data.comments || []);
+      try {
+        const latestComments = await commentService.getCommentsByBlog(data.id);
+        setComments(latestComments);
+      } catch (commentError) {
+        console.warn('Comments could not be loaded for this article:', commentError);
+        setComments([]);
+      }
     } catch (error) {
       console.error('Error loading blog:', error);
       setError('The article you requested could not be found or is no longer available.');
@@ -69,9 +77,11 @@ export function BlogPost() {
 
   if (!blog) {
     return (
-      <StatePage
+      <ErrorRedirectPage
         title="Article unavailable"
         description={error || 'The article you requested could not be found.'}
+        actionLabel="Back to Home"
+        redirectUrl="/"
       />
     );
   }
@@ -82,7 +92,7 @@ export function BlogPost() {
     <article className="max-w-4xl mx-auto px-4 py-12">
       {blog.cover_image && (
         <div className="aspect-[16/9] rounded-2xl overflow-hidden mb-8">
-          <img
+          <ImageWithFallback
             src={blog.cover_image}
             alt={blog.title}
             className="w-full h-full object-cover"
@@ -131,7 +141,7 @@ export function BlogPost() {
           remarkPlugins={[remarkGfm]}
           components={{
             img: ({ ...props }) => (
-              <img {...props} className="rounded-xl max-h-[32rem] w-full object-cover" />
+              <ImageWithFallback {...props} className="rounded-xl max-h-[32rem] w-full object-cover" />
             ),
             a: ({ ...props }) => (
               <a

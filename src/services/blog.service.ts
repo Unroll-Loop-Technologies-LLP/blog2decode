@@ -1,55 +1,81 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase, supabase } from '../lib/supabase';
 import type { Blog, BlogWithAuthor, Category, Tag } from '../types';
+
+const QUERY_TIMEOUT_MS = 8000;
+
+async function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  let timeoutId: number | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeoutId = window.setTimeout(() => reject(new Error(message)), QUERY_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
 
 export const blogService = {
   // Get all published blogs with author info
   async getPublishedBlogs() {
-    const { data, error } = await supabase
-      .from('blogs')
-      .select(`
-        *,
-        author:users(*),
-        blog_categories(
-          category:categories(*)
-        ),
-        blog_tags(
-          tag:tags(*)
-        )
-      `)
-      .eq('status', 'published')
-      .order('published_at', { ascending: false });
+    const { data, error } = await withTimeout(
+      publicSupabase
+        .from('blogs')
+        .select(`
+          *,
+          author:users(*),
+          blog_categories(
+            category:categories(*)
+          ),
+          blog_tags(
+            tag:tags(*)
+          )
+        `)
+        .eq('status', 'published')
+        .order('published_at', { ascending: false }),
+      'Loading published blogs took too long.'
+    );
 
     if (error) throw error;
-    return this.transformBlogs(data);
+    return this.transformBlogs(data ?? []);
   },
 
   // Get blog by slug
   async getBlogBySlug(slug: string) {
-    const { data, error } = await supabase
-      .from('blogs')
-      .select(`
-        *,
-        author:users(*),
-        blog_categories(
-          category:categories(*)
-        ),
-        blog_tags(
-          tag:tags(*)
-        ),
-        comments(
+    const { data, error } = await withTimeout(
+      publicSupabase
+        .from('blogs')
+        .select(`
           *,
-          user:users(*)
-        )
-      `)
-      .eq('slug', slug)
-      .eq('status', 'published')
-      .single();
+          author:users(*),
+          blog_categories(
+            category:categories(*)
+          ),
+          blog_tags(
+            tag:tags(*)
+          )
+        `)
+        .eq('slug', slug)
+        .eq('status', 'published')
+        .single(),
+      'Loading this article took too long.'
+    );
 
     if (error) throw error;
 
     // Increment views
     if (data.id) {
-      await supabase.rpc('increment_blog_views', { blog_id: data.id });
+      void (async () => {
+        const { error: rpcError } = await publicSupabase.rpc('increment_blog_views', { blog_id: data.id });
+        if (rpcError) {
+          console.warn('Could not increment blog views:', rpcError);
+        }
+      })();
     }
 
     return this.transformBlog(data);
@@ -57,51 +83,60 @@ export const blogService = {
 
   // Get blogs by category
   async getBlogsByCategory(categorySlug: string) {
-    const { data: category } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', categorySlug)
-      .single();
+    const { data: category } = await withTimeout(
+      publicSupabase
+        .from('categories')
+        .select('id')
+        .eq('slug', categorySlug)
+        .single(),
+      'Loading this category took too long.'
+    );
 
     if (!category) return [];
 
-    const { data, error } = await supabase
-      .from('blogs')
-      .select(`
-        *,
-        author:users(*),
-        blog_categories!inner(category_id),
-        blog_tags(
-          tag:tags(*)
-        )
-      `)
-      .eq('status', 'published')
-      .eq('blog_categories.category_id', category.id)
-      .order('published_at', { ascending: false });
+    const { data, error } = await withTimeout(
+      publicSupabase
+        .from('blogs')
+        .select(`
+          *,
+          author:users(*),
+          blog_categories!inner(category_id),
+          blog_tags(
+            tag:tags(*)
+          )
+        `)
+        .eq('status', 'published')
+        .eq('blog_categories.category_id', category.id)
+        .order('published_at', { ascending: false }),
+      'Loading articles for this category took too long.'
+    );
 
     if (error) throw error;
-    return this.transformBlogs(data);
+    return this.transformBlogs(data ?? []);
   },
 
   // Get blogs by author
   async getBlogsByAuthor(authorId: string) {
-    const { data, error } = await supabase
-      .from('blogs')
-      .select(`
-        *,
-        author:users(*),
-        blog_categories(
-          category:categories(*)
-        ),
-        blog_tags(
-          tag:tags(*)
-        )
-      `)
-      .eq('author_id', authorId)
-      .order('created_at', { ascending: false });
+    const { data, error } = await withTimeout(
+      supabase
+        .from('blogs')
+        .select(`
+          *,
+          author:users(*),
+          blog_categories(
+            category:categories(*)
+          ),
+          blog_tags(
+            tag:tags(*)
+          )
+        `)
+        .eq('author_id', authorId)
+        .order('created_at', { ascending: false }),
+      'Loading your blogs took too long.'
+    );
 
     if (error) throw error;
-    return this.transformBlogs(data);
+    return this.transformBlogs(data ?? []);
   },
 
   // Create blog
@@ -235,24 +270,30 @@ export const blogService = {
 
   // Get all categories
   async getCategories() {
-    const { data, error } = await supabase
-      .from('categories')
-      .select('*')
-      .order('name');
+    const { data, error } = await withTimeout(
+      publicSupabase
+        .from('categories')
+        .select('*')
+        .order('name'),
+      'Loading categories took too long.'
+    );
 
     if (error) throw error;
-    return data;
+    return data ?? [];
   },
 
   // Get all tags
   async getTags() {
-    const { data, error } = await supabase
-      .from('tags')
-      .select('*')
-      .order('name');
+    const { data, error } = await withTimeout(
+      publicSupabase
+        .from('tags')
+        .select('*')
+        .order('name'),
+      'Loading tags took too long.'
+    );
 
     if (error) throw error;
-    return data;
+    return data ?? [];
   },
 
   // Create tag

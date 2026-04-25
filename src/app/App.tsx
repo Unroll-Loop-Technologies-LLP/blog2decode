@@ -13,20 +13,9 @@ import { AuthorDashboard } from './pages/AuthorDashboard';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { NotFound } from './pages/NotFound';
 import { ResetPassword } from './pages/ResetPassword';
-import { useAuth } from '../contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
 
 function AppShell() {
   const location = useLocation();
-  const { loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-    );
-  }
 
   return (
     <AppErrorBoundary resetKey={`${location.pathname}${location.search}${location.hash}`}>
