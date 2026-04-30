@@ -54,7 +54,7 @@ Run the SQL migration in your Supabase SQL Editor:
 5. Click "Run" to execute
 
 This will create:
-- All required tables (users, blogs, categories, tags, comments, subscriptions)
+- All required tables (users, portal_user_access, blogs, categories, tags, comments, subscriptions)
 - Row Level Security (RLS) policies
 - Database indexes for performance
 - Triggers for automatic user profile creation
@@ -65,6 +65,11 @@ This will create:
 The Supabase integration in Figma Make automatically provides:
 - `VITE_SUPABASE_URL` - Your Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` - Your Supabase anon key
+
+Optional when sharing one Supabase database across multiple portals:
+- `VITE_PORTAL_ID` - Unique id for this portal, used for portal-scoped activation/deactivation. Defaults to `cybersphere-blog`.
+
+For an existing database, run `PORTAL_ACCESS_MIGRATION.sql` once instead of rerunning the full setup file.
 
 These are configured automatically when you connect Supabase in the settings.
 

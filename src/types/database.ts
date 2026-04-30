@@ -38,6 +38,29 @@ export interface Database {
           created_at?: string
         }
       }
+      portal_user_access: {
+        Row: {
+          portal_id: string
+          user_id: string
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          portal_id: string
+          user_id: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          portal_id?: string
+          user_id?: string
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
       blogs: {
         Row: {
           id: string

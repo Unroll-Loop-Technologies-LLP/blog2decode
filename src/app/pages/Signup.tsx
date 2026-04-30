@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router';
+import { useNavigate, Link, Navigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { toast } from 'sonner';
 
 export function Signup() {
   const navigate = useNavigate();
-  const { signUp } = useAuth();
+  const { signUp, user, loading: authLoading } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,6 +26,10 @@ export function Signup() {
       setLoading(false);
     }
   };
+
+  if (!authLoading && user) {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4">

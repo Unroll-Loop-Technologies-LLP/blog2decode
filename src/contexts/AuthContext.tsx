@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
-import { authStorageKey, legacyAuthStorageKey, supabase } from '../lib/supabase';
+import { authStorageKey, legacyAuthStorageKey, portalId, supabase } from '../lib/supabase';
 import type { User } from '../types';
 
 interface AuthContextType {
@@ -50,6 +50,34 @@ function clearStoredAuthState() {
     window.localStorage.removeItem(key);
     window.sessionStorage.removeItem(key);
   });
+}
+
+async function ensurePortalAccess(userId: string) {
+  const { data, error } = await supabase
+    .from('portal_user_access')
+    .select('is_active')
+    .eq('portal_id', portalId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  if (data) {
+    if (!data.is_active) {
+      throw new Error('Your account is deactivated for this portal.');
+    }
+    return;
+  }
+
+  const { error: insertError } = await supabase
+    .from('portal_user_access')
+    .insert({
+      portal_id: portalId,
+      user_id: userId,
+      is_active: true,
+    });
+
+  if (insertError) throw insertError;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -128,18 +156,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!isMounted) return;
 
       setLoading(true);
       setSession(nextSession);
 
-      if (nextSession?.user) {
-        await fetchUserProfile(nextSession.user);
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
+      window.setTimeout(async () => {
+        if (!isMounted) return;
+
+        try {
+          if (nextSession?.user) {
+            await fetchUserProfile(nextSession.user);
+          } else {
+            setUser(null);
+            setLoading(false);
+          }
+        } catch (error) {
+          console.warn('Auth state profile refresh failed:', error);
+          if (isMounted) {
+            setUser(null);
+            setSession(null);
+            setLoading(false);
+          }
+        }
+      }, 0);
     });
 
     return () => {
@@ -162,6 +203,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const fallbackUser = buildFallbackUser(authUser);
 
     try {
+      await ensurePortalAccess(authUser.id);
+
       const { data, error } = await supabase
         .from('users')
         .select('*')
@@ -186,6 +229,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(fallbackUser);
     } catch (error) {
       console.error('Error fetching user profile:', error);
+
+      if (error instanceof Error && error.message === 'Your account is deactivated for this portal.') {
+        clearStoredAuthState();
+        setUser(null);
+        setSession(null);
+        throw error;
+      }
+
       setUser(fallbackUser);
     } finally {
       setLoading(false);
@@ -206,6 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (error) throw error;
     if (data.user) {
+      await ensurePortalAccess(data.user.id);
       await fetchUserProfile(data.user);
     }
   };
@@ -215,7 +267,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
@@ -224,12 +276,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(data.session);
 
       if (data.user) {
+        await ensurePortalAccess(data.user.id);
         await fetchUserProfile(data.user);
         return;
       }
 
       setLoading(false);
     } catch (error) {
+      if (error instanceof Error && error.message === 'Your account is deactivated for this portal.') {
+        clearStoredAuthState();
+        setUser(null);
+        setSession(null);
+      }
+
       setLoading(false);
       throw error;
     }
