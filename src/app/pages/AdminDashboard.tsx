@@ -1,34 +1,41 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { supabase } from '../../lib/supabase';
+import { portalId, supabase } from '../../lib/supabase';
 import { subscriptionService } from '../../services/subscription.service';
 import type { User, Subscription } from '../../types';
-import { Users, Mail, Loader2, Save, KeyRound, Settings } from 'lucide-react';
+import { Users, Mail, Loader2, Save, KeyRound, Settings, UserCheck, UserX } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
+type PortalUser = User & {
+  is_active: boolean;
+};
+
 export function AdminDashboard() {
-  const { isAdmin, user: currentUser, updateProfile, sendPasswordResetEmail } = useAuth();
+  const { isAdmin, user: currentUser, updateProfile, sendPasswordResetEmail, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'users' | 'subscriptions' | 'account'>('users');
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<PortalUser[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [updatingAccessUserId, setUpdatingAccessUserId] = useState<string | null>(null);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
   const [accountName, setAccountName] = useState('');
   const [accountEmail, setAccountEmail] = useState('');
   const [savingAccount, setSavingAccount] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!isAdmin) {
       navigate('/');
       return;
     }
     loadData();
-  }, [isAdmin, activeTab]);
+  }, [authLoading, isAdmin, activeTab]);
 
   useEffect(() => {
     setAccountName(currentUser?.name || '');
@@ -39,12 +46,21 @@ export function AdminDashboard() {
     setLoading(true);
     try {
       if (activeTab === 'users') {
-        const { data } = await supabase
-          .from('users')
-          .select('*')
+        const { data, error } = await supabase
+          .from('portal_user_access')
+          .select(`
+            is_active,
+            user:users(*)
+          `)
+          .eq('portal_id', portalId)
           .order('created_at', { ascending: false });
 
-        const nextUsers = data || [];
+        if (error) throw error;
+
+        const nextUsers = (data || [])
+          .map((row: any) => (row.user ? { ...row.user, is_active: row.is_active } : null))
+          .filter(Boolean) as PortalUser[];
+
         setUsers(nextUsers);
         setUserNames(
           nextUsers.reduce<Record<string, string>>((acc, user) => {
@@ -110,6 +126,31 @@ export function AdminDashboard() {
     }
   };
 
+  const handleSetUserActive = async (userId: string, isActive: boolean) => {
+    if (userId === currentUser?.id && !isActive) {
+      toast.error('You cannot deactivate your own portal access.');
+      return;
+    }
+
+    setUpdatingAccessUserId(userId);
+    try {
+      const { error } = await supabase
+        .from('portal_user_access')
+        .update({ is_active: isActive })
+        .eq('portal_id', portalId)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      toast.success(isActive ? 'User activated for this portal.' : 'User deactivated for this portal.');
+      await loadData();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update portal access');
+    } finally {
+      setUpdatingAccessUserId(null);
+    }
+  };
+
   const handleUpdateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingAccount(true);
@@ -160,7 +201,7 @@ export function AdminDashboard() {
         </div>
       </div>
 
-      {loading ? (
+      {authLoading || loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
         </div>
@@ -175,6 +216,7 @@ export function AdminDashboard() {
                       <th className="px-6 py-3 text-left text-sm font-medium">Name</th>
                       <th className="px-6 py-3 text-left text-sm font-medium">Email</th>
                       <th className="px-6 py-3 text-left text-sm font-medium">Role</th>
+                      <th className="px-6 py-3 text-left text-sm font-medium">Portal Access</th>
                       <th className="px-6 py-3 text-left text-sm font-medium">Joined</th>
                       <th className="px-6 py-3 text-left text-sm font-medium">Actions</th>
                     </tr>
@@ -219,6 +261,15 @@ export function AdminDashboard() {
                             {user.role}
                           </span>
                         </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-3 py-1 rounded-full text-sm ${
+                              user.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}
+                          >
+                            {user.is_active ? 'Active' : 'Deactivated'}
+                          </span>
+                        </td>
                         <td className="px-6 py-4 text-gray-600">
                           {format(new Date(user.created_at), 'MMM d, yyyy')}
                         </td>
@@ -245,6 +296,23 @@ export function AdminDashboard() {
                                 Reset Password
                               </button>
                             )}
+                            <button
+                              onClick={() => handleSetUserActive(user.id, !user.is_active)}
+                              disabled={updatingAccessUserId === user.id || (user.id === currentUser?.id && user.is_active)}
+                              className={`inline-flex items-center gap-1 px-3 py-1 border rounded text-sm transition-colors disabled:opacity-50 ${
+                                user.is_active
+                                  ? 'text-red-700 hover:bg-red-50'
+                                  : 'text-green-700 hover:bg-green-50'
+                              }`}
+                              title={
+                                user.id === currentUser?.id && user.is_active
+                                  ? 'You cannot deactivate your own portal access'
+                                  : undefined
+                              }
+                            >
+                              {user.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                              {user.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
                           </div>
                         </td>
                       </tr>

@@ -1,10 +1,10 @@
-import { supabase } from '../lib/supabase';
+import { publicSupabase, supabase } from '../lib/supabase';
 import type { Comment, CommentWithUser } from '../types';
 
 export const commentService = {
   // Get comments for a blog
   async getCommentsByBlog(blogId: string): Promise<CommentWithUser[]> {
-    const { data, error } = await supabase
+    const { data, error } = await publicSupabase
       .from('comments')
       .select(`
         *,

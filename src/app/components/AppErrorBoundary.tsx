@@ -1,5 +1,5 @@
 import React from 'react';
-import { StatePage } from './StatePage';
+import { ErrorRedirectPage } from './ErrorRedirectPage';
 
 interface AppErrorBoundaryProps {
   children: React.ReactNode;
@@ -35,9 +35,10 @@ export class AppErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <StatePage
+        <ErrorRedirectPage
           title="Something went wrong"
           description="We hit an unexpected issue while loading this page. Please head back home and try again."
+          redirectUrl="/"
         />
       );
     }

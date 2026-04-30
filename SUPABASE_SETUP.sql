@@ -22,6 +22,17 @@ CREATE TABLE IF NOT EXISTS public.users (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Portal-scoped user access.
+-- This keeps activation/deactivation local to one portal when multiple portals share this database.
+CREATE TABLE IF NOT EXISTS public.portal_user_access (
+  portal_id TEXT NOT NULL,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (portal_id, user_id)
+);
+
 -- Blogs table
 CREATE TABLE IF NOT EXISTS public.blogs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -99,6 +110,8 @@ CREATE INDEX IF NOT EXISTS idx_blogs_published_at ON public.blogs(published_at D
 CREATE INDEX IF NOT EXISTS idx_blogs_slug ON public.blogs(slug);
 CREATE INDEX IF NOT EXISTS idx_comments_blog ON public.comments(blog_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
+CREATE INDEX IF NOT EXISTS idx_portal_user_access_portal ON public.portal_user_access(portal_id);
+CREATE INDEX IF NOT EXISTS idx_portal_user_access_user ON public.portal_user_access(user_id);
 
 -- ================================================
 -- ROW LEVEL SECURITY (RLS)
@@ -106,6 +119,7 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 
 -- Enable RLS on all tables
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portal_user_access ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.blogs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
@@ -119,6 +133,20 @@ CREATE POLICY "Users can view all profiles" ON public.users FOR SELECT USING (tr
 CREATE POLICY "Users can update own profile" ON public.users FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users can insert own profile" ON public.users FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Admins can manage all profiles" ON public.users FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Portal access policies
+CREATE POLICY "Users can view own portal access" ON public.portal_user_access FOR SELECT USING (
+  auth.uid() = user_id OR
+  EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
+);
+
+CREATE POLICY "Users can join a portal as active" ON public.portal_user_access FOR INSERT WITH CHECK (
+  auth.uid() = user_id AND is_active = TRUE
+);
+
+CREATE POLICY "Admins can update portal access" ON public.portal_user_access FOR UPDATE USING (
   EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
 );
 
@@ -244,6 +272,12 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS update_blogs_updated_at ON public.blogs;
 CREATE TRIGGER update_blogs_updated_at
   BEFORE UPDATE ON public.blogs
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
+
+-- Trigger for portal access updated_at
+DROP TRIGGER IF EXISTS update_portal_user_access_updated_at ON public.portal_user_access;
+CREATE TRIGGER update_portal_user_access_updated_at
+  BEFORE UPDATE ON public.portal_user_access
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
 -- Trigger for comments updated_at

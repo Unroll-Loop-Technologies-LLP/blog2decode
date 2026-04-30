@@ -8,9 +8,10 @@ import { RichTextEditor } from '../components/RichTextEditor';
 import { Plus, Edit, Trash2, Eye, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 export function AuthorDashboard() {
-  const { user, isAuthor } = useAuth();
+  const { user, isAuthor, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [blogs, setBlogs] = useState<BlogWithAuthor[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -23,20 +24,24 @@ export function AuthorDashboard() {
   const [content, setContent] = useState('');
   const [excerpt, setExcerpt] = useState('');
   const [coverImage, setCoverImage] = useState('');
+  const [coverImageInput, setCoverImageInput] = useState('');
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadState, setUploadState] = useState('');
+  const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
+    if (authLoading) return;
+
     if (!isAuthor) {
       navigate('/');
       return;
     }
     loadData();
-  }, [isAuthor, user]);
+  }, [authLoading, isAuthor, user]);
 
   const loadData = async () => {
     if (!user) return;
@@ -63,10 +68,13 @@ export function AuthorDashboard() {
     setContent('');
     setExcerpt('');
     setCoverImage('');
+    setCoverImageInput('');
     setStatus('draft');
     setSelectedCategories([]);
     setSelectedTags([]);
     setEditingBlog(null);
+    setUploadState('');
+    setUploadError('');
   };
 
   const handleCreateNew = () => {
@@ -80,6 +88,7 @@ export function AuthorDashboard() {
     setContent(typeof blog.content === 'string' ? blog.content : JSON.stringify(blog.content));
     setExcerpt(blog.excerpt || '');
     setCoverImage(blog.cover_image || '');
+    setCoverImageInput(blog.cover_image?.startsWith('data:image/') ? '' : blog.cover_image || '');
     setStatus(blog.status);
     setSelectedCategories(blog.categories?.map((category) => category.id) || []);
     setSelectedTags(blog.tags?.map((tag) => tag.id) || []);
@@ -147,19 +156,22 @@ export function AuthorDashboard() {
     if (!file || !user) return;
 
     setUploadingImage(true);
+    setUploadError('');
     try {
-      const imageUrl = await storageService.uploadBlogImage(file, user.id, setUploadProgress);
+      const imageUrl = await storageService.uploadBlogImage(file, user.id, setUploadState);
       setCoverImage(imageUrl);
+      setCoverImageInput('');
       toast.success('Cover image uploaded successfully!');
     } catch (error: any) {
+      setUploadError(error.message || 'Failed to upload cover image');
       toast.error(error.message || 'Failed to upload cover image');
     } finally {
       setUploadingImage(false);
-      setUploadProgress(0);
+      setTimeout(() => setUploadState(''), 1200);
     }
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -168,6 +180,8 @@ export function AuthorDashboard() {
   }
 
   if (showEditor) {
+    const hasEmbeddedCoverImage = coverImage.startsWith('data:image/');
+
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="mb-6">
@@ -212,8 +226,12 @@ export function AuthorDashboard() {
             <label className="block font-medium mb-2">Cover Image URL (optional)</label>
             <input
               type="url"
-              value={coverImage}
-              onChange={(e) => setCoverImage(e.target.value)}
+              value={coverImageInput}
+              onChange={(e) => {
+                const nextValue = e.target.value;
+                setCoverImageInput(nextValue);
+                setCoverImage(nextValue.trim());
+              }}
               className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-black"
               placeholder="https://example.com/image.jpg"
             />
@@ -225,6 +243,7 @@ export function AuthorDashboard() {
                 <input
                   type="file"
                   accept="image/*"
+                  disabled={uploadingImage}
                   onChange={async (e) => {
                     await handleUploadImage(e.target.files?.[0]);
                     e.target.value = '';
@@ -233,33 +252,52 @@ export function AuthorDashboard() {
                 />
                 {uploadingImage && (
                   <div className="w-full sm:max-w-xs">
-                    <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Uploading...
-                      </div>
-                      <span>{uploadProgress}%</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{uploadState || 'Uploading image...'}</span>
                     </div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-black transition-all duration-200"
-                        style={{ width: `${uploadProgress}%` }}
-                      />
+                      <div className="h-full w-1/2 bg-black animate-pulse" />
                     </div>
                   </div>
                 )}
               </div>
+              {uploadError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {uploadError}
+                </div>
+              )}
               <p className="text-sm text-gray-500">
-                Upload uses the Supabase bucket `blog-images` by default.
+                Uploaded cover images are embedded directly into the article, so they keep working without extra storage setup.
               </p>
+              <p className="text-sm text-gray-500">
+                Use a reasonably sized image for best performance. Images larger than 4 MB are blocked.
+              </p>
+              {hasEmbeddedCoverImage && (
+                <p className="text-sm text-gray-500">
+                  An uploaded image is attached below. The URL field stays empty so the editor does not freeze on large embedded data.
+                </p>
+              )}
             </div>
             {coverImage && (
               <div className="mt-4">
-                <img
+                <ImageWithFallback
                   src={coverImage}
                   alt="Cover preview"
                   className="w-full max-w-md h-48 object-cover rounded-xl border"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCoverImage('');
+                    setCoverImageInput('');
+                    setUploadState('');
+                    setUploadError('');
+                  }}
+                  className="mt-3 text-sm text-gray-600 hover:text-black"
+                >
+                  Remove cover image
+                </button>
               </div>
             )}
           </div>

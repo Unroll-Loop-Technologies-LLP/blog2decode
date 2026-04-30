@@ -28,6 +28,10 @@ In Figma Make settings, ensure:
 - ✅ Supabase URL is connected
 - ✅ Anon Key is connected
 
+If this Supabase database is shared by multiple portals, set `VITE_PORTAL_ID` to a unique value for this portal. Deactivating a user in Admin only changes access for that portal id.
+
+For an existing database, run `PORTAL_ACCESS_MIGRATION.sql` once in the Supabase SQL Editor to add the portal access table safely.
+
 The app will automatically use these credentials.
 
 ## Step 3: Create Your First Account
